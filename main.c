@@ -1,6 +1,7 @@
 // System dependencies
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 // Third-party dependencies
 #include "lib/yahdlc/yahdlc.h"
@@ -55,6 +56,23 @@ int readFile(const char* fileName, char** buffer, unsigned int *bufferSize)
 }
 
 
+/**
+ * Retrieves data from specified buffer containing the HDLC frame. Frames can be
+ * parsed from multiple buffers e.g. when received via UART.
+ *
+ * @param[in]  fileName Relative or absolute path to file containing HDLC buffers
+ * @param[out] buffer Destination buffer (should be able to contain max frame size)
+ * @param[out] bufferSize Destination buffer length
+ * @retval >=0 Success (size of returned value should be discarded from source buffer)
+ *
+ */
+int getHDLC(const char* bufferIn, unsigned int bufferInSize, char* bufferOut, unsigned int* bufferOutSize)
+{
+    yahdlc_control_t temp;
+    int result = yahdlc_get_data(&temp, bufferIn, bufferInSize, bufferOut, bufferOutSize);
+    return result;
+}
+
 int main(int argc, char *argv[])
 {
     const char* fileName = "../assets/transmission.bin";
@@ -68,10 +86,45 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    for (int i = 0; i <= fileSize; i++)
+    for (int i = 0; i < fileSize; i++)
     {
-        printf("0x%x ",  fileBuffer[i]  & 0xff);
+        unsigned int hdlcSize = 50;
+        char hdlcBuffer[50] = "";
+        yahdlc_control_t yahdlcControl;
+        yahdlc_state_t yahdlcState;
+        result = yahdlc_get_data_with_state(&yahdlcState, &yahdlcControl, fileBuffer+i, fileSize-i, hdlcBuffer, &hdlcSize);
+        // printf("Result code = '%d'\n", result);
+        // getHDLC(fileBuffer + i, fileSize, hdlcBuffer, &hdlcSize);
+
+        for (int j = 0; j < hdlcSize; j++)
+        {
+            printf("### '%d' ",  hdlcBuffer[j]);
+        }
+        if (hdlcSize != 0)
+        {
+            printf("| ");
+        }
+
+        if (result < 0)
+        {
+            i += hdlcSize;
+            continue;
+        }
+
+
+        i += result;
+        // printf("0x%x ",  fileBuffer[i]  & 0xff);
     }
+
+    // unsigned int hdlcSize = 800;
+    // char hdlcBuffer[800] = "";
+
+
+    // getHDLC(fileBuffer, fileSize, &hdlcBuffer, &hdlcSize);
+    // printf("HDLC size '%u' HDLC buffer '%s'", hdlcSize, hdlcBuffer);
+
+    // // Clean-up
+    // free(fileBuffer);
 
     return 0;
 }
