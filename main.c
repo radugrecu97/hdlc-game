@@ -13,7 +13,8 @@
  * @param[in]  fileName Relative or absolute path to file containing HDLC buffers
  * @param[out] buffer Destination buffer (should be able to contain max frame size)
  * @param[out] bufferSize Destination buffer length
- * @retval >=0 Success (size of returned value should be discarded from source buffer)
+ * @retval >=0 Success
+ * @retval <=0 Error
 **/
 int readFile(const char* fileName, char** buffer, unsigned int *bufferSize)
 {
@@ -23,7 +24,7 @@ int readFile(const char* fileName, char** buffer, unsigned int *bufferSize)
     filePtr = fopen(fileName, "r");
     if (filePtr == NULL) {
         printf("Error opening file.\n");
-        exit(-1);
+        return -1;
     }
 
     if (filePtr == NULL)
@@ -40,14 +41,14 @@ int readFile(const char* fileName, char** buffer, unsigned int *bufferSize)
     *buffer = (char*) malloc(sizeof(char) * (*bufferSize + 1));
     if (*buffer == NULL) {
         printf("Memory not allocated.\n");
-        exit(-1);
+        return -1;
     }
 
     // Read the content and store it inside myString
     if (fgets(*buffer, *bufferSize, filePtr) == NULL)
     {
         printf("Couldn't read file contents into buffer.\n");
-        exit(-1);
+        return -1;
     }
 
     fclose(filePtr);
@@ -57,52 +58,30 @@ int readFile(const char* fileName, char** buffer, unsigned int *bufferSize)
 
 
 /**
- * Retrieves data from specified buffer containing the HDLC frame. Frames can be
- * parsed from multiple buffers e.g. when received via UART.
+ * Retrieves list of movement actions from HDLC buffer
  *
- * @param[in]  fileName Relative or absolute path to file containing HDLC buffers
- * @param[out] buffer Destination buffer (should be able to contain max frame size)
- * @param[out] bufferSize Destination buffer length
- * @retval >=0 Success (size of returned value should be discarded from source buffer)
+ * @param[in]  bufferIn Input buffer of 1 byte commands
+ * @param[in]  bufferInSize Size of buffer
+ * @param[out] bufferOut Destination buffer (should be able to contain all actions)
+ * @param[out] bufferOutSize Actual element count in buffer
+ * @retval >=0 Success
+ * @retval <=0 Error
  *
  */
-int getHDLC(const char* bufferIn, unsigned int bufferInSize, char* bufferOut, unsigned int* bufferOutSize)
+int getActions(const char* bufferIn, unsigned int *bufferInSize, char* bufferOut, unsigned int *bufferOutSize)
 {
-    yahdlc_control_t temp;
-    int result = yahdlc_get_data(&temp, bufferIn, bufferInSize, bufferOut, bufferOutSize);
-    return result;
-}
-
-int main(int argc, char *argv[])
-{
-    const char* fileName = "../assets/transmission.bin";
-    char* fileBuffer;
-    unsigned int fileSize;
-
-    int result = readFile(fileName, &fileBuffer, &fileSize);
-    if (result < 0)
+    for (int i = 0; i < *bufferInSize; i++)
     {
-        printf("Error reading file\n");
-        return -1;
-    }
-
-    for (int i = 0; i < fileSize; i++)
-    {
-        unsigned int hdlcSize = 50;
-        char hdlcBuffer[50] = "";
+        unsigned int hdlcSize = 10;
+        char hdlcBuffer[10] = "";
         yahdlc_control_t yahdlcControl;
         yahdlc_state_t yahdlcState;
-        result = yahdlc_get_data_with_state(&yahdlcState, &yahdlcControl, fileBuffer+i, fileSize-i, hdlcBuffer, &hdlcSize);
-        // printf("Result code = '%d'\n", result);
-        // getHDLC(fileBuffer + i, fileSize, hdlcBuffer, &hdlcSize);
+        int result = yahdlc_get_data_with_state(&yahdlcState, &yahdlcControl, (bufferIn + i), (*bufferInSize - i), hdlcBuffer, &hdlcSize);
 
-        for (int j = 0; j < hdlcSize; j++)
+        if (hdlcSize > 0)
         {
-            printf("### '%d' ",  hdlcBuffer[j]);
-        }
-        if (hdlcSize != 0)
-        {
-            printf("| ");
+            // Each command is 1 byte long, so we're only interested in the first element
+            bufferOut[(*bufferOutSize)++] = hdlcBuffer[0];
         }
 
         if (result < 0)
@@ -111,20 +90,32 @@ int main(int argc, char *argv[])
             continue;
         }
 
-
         i += result;
-        // printf("0x%x ",  fileBuffer[i]  & 0xff);
     }
 
-    // unsigned int hdlcSize = 800;
-    // char hdlcBuffer[800] = "";
+    return 0;
+}
 
 
-    // getHDLC(fileBuffer, fileSize, &hdlcBuffer, &hdlcSize);
-    // printf("HDLC size '%u' HDLC buffer '%s'", hdlcSize, hdlcBuffer);
+int main(int argc, char *argv[])
+{
+    const char* fileName = "../assets/transmission.bin";
+    char* fileBuffer;
+    unsigned int fileSize = 0;
 
-    // // Clean-up
-    // free(fileBuffer);
+    int result = readFile(fileName, &fileBuffer, &fileSize);
+    if (result < 0)
+    {
+        printf("Error reading file\n");
+        return -1;
+    }
+
+    char actionBuffer[50] = {0};
+    unsigned int actionCount = 0;
+    getActions(fileBuffer, &fileSize, actionBuffer, &actionCount);
+
+    printf("\n");
+    free(fileBuffer);
 
     return 0;
 }
